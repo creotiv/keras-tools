@@ -247,9 +247,16 @@ class ImageDataGenerator(ImageDataGeneratorBase):
             save_prefix=save_prefix,
             save_format=save_format,
             follow_links=follow_links,
-            binary_mask=False)
+            binary_mask=binary_mask)
 
 
+def zip_gen(x,y):
+    '''Zip two generator together'''
+    while True:
+        _x = x.next()
+        _y = y.next()
+        yield _x, _y
+      
 if __name__ == "__main__":
     import cv2
     # data_gen_args = dict(rotation_range=15.,
