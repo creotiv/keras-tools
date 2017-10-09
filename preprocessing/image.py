@@ -249,13 +249,26 @@ class ImageDataGenerator(ImageDataGeneratorBase):
             follow_links=follow_links,
             binary_mask=binary_mask)
 
-
-def zip_gen(x,y):
-    '''Zip two generator together'''
+def zip_gen(args, merge=[], merge_axis=-1, preprocess_func=None, preprocess_args=[0]):
     while True:
-        _x = x.next()
-        _y = y.next()
-        yield _x, _y
+        tmp = []
+        for i, p in enumerate(args):
+            el = p.next()
+            if preprocess_func and i in preprocess_args:
+                el = preprocess_func(el)
+            tmp.append(el)
+        if merge:
+            to_merge = []
+            for m in merge:
+                to_merge.append(tmp[m])
+            out = []
+            for m in range(len(tmp)):
+                if m not in merge:
+                    out.append(tmp[m])
+            out.append(np.concatenate(to_merge, axis=merge_axis))
+            yield tuple(out)
+        else:
+            yield tuple(tmp)
       
 if __name__ == "__main__":
     pass
@@ -269,12 +282,12 @@ if __name__ == "__main__":
     # imggen = ig1.flow_from_directory('/mnt/course/datasets/portraits/imgs/', binary_mask=True, target_size=(305,305), batch_size=1, class_mode=None, seed=1)
     # maskgen = ig2.flow_from_directory('/mnt/course/datasets/portraits/masks/', binary_mask=True, target_size=(305,305), batch_size=1, class_mode=None, color_mode="mask", seed=1)
 
-    # traingen = zip_gen(imggen, maskgen)
+    # traingen = zip_gen([imggen, maskgen])
 
     # imggen2 = ig3.flow_from_directory('/mnt/course/datasets/portraits/imgs/', binary_mask=True, target_size=(305,305), batch_size=1, class_mode=None, seed=2)
     # maskgen2 = ig4.flow_from_directory('/mnt/course/datasets/portraits/masks/', binary_mask=True, target_size=(305,305), batch_size=1, class_mode=None, color_mode="mask", seed=2)
 
-    # testgen = zip_gen(imggen2, maskgen2)
+    # testgen = zip_gen([imggen2, maskgen2])
 
     # model.fit_generator(
     #     generator=traingen, validation_data=testgen,
