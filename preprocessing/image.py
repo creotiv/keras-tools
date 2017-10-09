@@ -258,30 +258,28 @@ def zip_gen(x,y):
         yield _x, _y
       
 if __name__ == "__main__":
-    import cv2
-    # data_gen_args = dict(rotation_range=15.,
-    #                      width_shift_range=0.1,
-    #                      height_shift_range=0.1,
-    #                      zoom_range=0.2)
-    # ig = ImageDataGenerator(**data_gen_args)
-    # d = ig.flow_from_directory('./mask/', batch_size=1,
-    #                            class_mode='categorical', seed=1, color_mode="mask")
-    # npy = d.next()
-    # d = ig.flow_from_directory('./img/', batch_size=1, class_mode='categorical', seed=1)
-    # img = d.next()
-    # print (npy[1])
-    # img_alpha = np.concatenate([img, npy], axis=-1)
-    # imsave('img_gen_test.png', img_alpha)
+    pass
+    # Example   
+    
+    # ig1 = ImageDataGenerator()
+    # ig2 = ImageDataGenerator()
+    # ig3 = ImageDataGenerator()
+    # ig4 = ImageDataGenerator()
 
-    # data_gen_args = dict(rotation_range=15.,
-    #                      width_shift_range=0.1,
-    #                      height_shift_range=0.1,
-    #                      zoom_range=0.2)
-    # ig = ImageDataGenerator(**data_gen_args)
-    # d = ig.flow_from_directory('/mnt/course/datasets/portraits/masks/', batch_size=1,
-    #                            class_mode=None, seed=1, color_mode="mask")
-    # npy = d.next()[0]
-    # d = ig.flow_from_directory('/mnt/course/datasets/portraits/imgs/', batch_size=1, class_mode=None, seed=1)
-    # img = d.next()[0]
-    # img_alpha = np.concatenate([img, npy], axis=-1)
-    # imsave('img_gen_test.png', img_alpha)
+    # imggen = ig1.flow_from_directory('/mnt/course/datasets/portraits/imgs/', binary_mask=True, target_size=(305,305), batch_size=1, class_mode=None, seed=1)
+    # maskgen = ig2.flow_from_directory('/mnt/course/datasets/portraits/masks/', binary_mask=True, target_size=(305,305), batch_size=1, class_mode=None, color_mode="mask", seed=1)
+
+    # traingen = zip_gen(imggen, maskgen)
+
+    # imggen2 = ig3.flow_from_directory('/mnt/course/datasets/portraits/imgs/', binary_mask=True, target_size=(305,305), batch_size=1, class_mode=None, seed=2)
+    # maskgen2 = ig4.flow_from_directory('/mnt/course/datasets/portraits/masks/', binary_mask=True, target_size=(305,305), batch_size=1, class_mode=None, color_mode="mask", seed=2)
+
+    # testgen = zip_gen(imggen2, maskgen2)
+
+    # model.fit_generator(
+    #     generator=traingen, validation_data=testgen,
+    #     steps_per_epoch=500,
+    #     validation_steps=50,
+    #     epochs=100,
+    #     verbose=1
+    # )
