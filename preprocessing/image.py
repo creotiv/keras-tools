@@ -164,30 +164,28 @@ class DirectoryIterator(Iterator):
     def _load_file(self, path):
         grayscale = self.color_mode == 'grayscale'
         if self.color_mode == "mask":
-            mask = np.load(os.path.join(self.directory, path))
+            mask = np.load(path)
             if self.binary_mask:
                 mask = imresize(mask, size=self.target_size, interp="nearest")
                 mask[mask == 255] = 1
             else:
                 mask *= 255
                 mask = imresize(mask, size=self.target_size, interp="lanczos")
-                print (mask)
             if self.data_format == "channels_first":
                 mask = np.expand_dims(mask, axis=0)
             else:
                 mask = np.expand_dims(mask, axis=-1)
             return mask
         else:
-            return img_to_array(load_img(os.path.join(self.directory, path),
+            return img_to_array(load_img(path,
                                          grayscale=grayscale,
                                          target_size=self.target_size), data_format=self.data_format)
 
     def _get_batches_of_transformed_samples(self, index_array):
         batch_x = np.zeros((len(index_array),) + self.image_shape, dtype=K.floatx())
         # build batch of image data
-        for i, j in enumerate(index_array[0]):
+        for i, j in enumerate(index_array):
             fname = self.filenames[j]
-            print (fname)
             x = self._load_file(os.path.join(self.directory, fname))
             x = self.image_data_generator.random_transform(x)
             x = self.image_data_generator.standardize(x)
@@ -222,7 +220,7 @@ class DirectoryIterator(Iterator):
             The next batch.
         """
         with self.lock:
-            index_array = next(self.index_generator)
+            index_array, current_index, current_batch_size = next(self.index_generator)
         # The transformation of images is not under thread lock
         # so it can be done in parallel
         return self._get_batches_of_transformed_samples(index_array)
@@ -254,15 +252,29 @@ class ImageDataGenerator(ImageDataGeneratorBase):
 
 if __name__ == "__main__":
     import cv2
-    data_gen_args = dict(rotation_range=15.,
-                         width_shift_range=0.1,
-                         height_shift_range=0.1,
-                         zoom_range=0.2)
-    ig = ImageDataGenerator(**data_gen_args)
-    d = ig.flow_from_directory('/mnt/course/datasets/portraits/masks/', batch_size=1,
-                               class_mode=None, seed=1, color_mode="mask")
-    npy = d.next()[0]
-    d = ig.flow_from_directory('/mnt/course/datasets/portraits/imgs/', batch_size=1, class_mode=None, seed=1)
-    img = d.next()[0]
-    img_alpha = np.concatenate([img, npy], axis=-1)
-    imsave('img_gen_test.png', img_alpha)
+    # data_gen_args = dict(rotation_range=15.,
+    #                      width_shift_range=0.1,
+    #                      height_shift_range=0.1,
+    #                      zoom_range=0.2)
+    # ig = ImageDataGenerator(**data_gen_args)
+    # d = ig.flow_from_directory('./mask/', batch_size=1,
+    #                            class_mode='categorical', seed=1, color_mode="mask")
+    # npy = d.next()
+    # d = ig.flow_from_directory('./img/', batch_size=1, class_mode='categorical', seed=1)
+    # img = d.next()
+    # print (npy[1])
+    # img_alpha = np.concatenate([img, npy], axis=-1)
+    # imsave('img_gen_test.png', img_alpha)
+
+    # data_gen_args = dict(rotation_range=15.,
+    #                      width_shift_range=0.1,
+    #                      height_shift_range=0.1,
+    #                      zoom_range=0.2)
+    # ig = ImageDataGenerator(**data_gen_args)
+    # d = ig.flow_from_directory('/mnt/course/datasets/portraits/masks/', batch_size=1,
+    #                            class_mode=None, seed=1, color_mode="mask")
+    # npy = d.next()[0]
+    # d = ig.flow_from_directory('/mnt/course/datasets/portraits/imgs/', batch_size=1, class_mode=None, seed=1)
+    # img = d.next()[0]
+    # img_alpha = np.concatenate([img, npy], axis=-1)
+    # imsave('img_gen_test.png', img_alpha)
