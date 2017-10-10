@@ -44,7 +44,6 @@ class Normalize(Layer):
         self.trainable_weights = [self.gamma]
 
     def call(self, x, mask=None):
-        print(x)
         output = K.l2_normalize(x, self.axis)
         output *= self.gamma
         return output
