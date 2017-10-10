@@ -26,6 +26,22 @@ def SSD300(input_shape=(300, 300, 3), num_classes=21):
         input_shape: Shape of the input image,
             expected to be either (300, 300, 3).
         num_classes: Number of classes including background.
+        
+    # Classifiers
+        
+    conv3_4  conv4_6   fc7   conv6_2   conv7_2   pool6
+      +       +         +      +           +       +
+      |       |         |      |           |       |
+      |       |         v      v           |       |
+      |       |                            |       |
+      |       |    +----------------+      |       |
+      |       +--> |                | <----+       |
+      |            |  Concatenate   |              |
+      +----------> |                |  <-----------+
+                   +-------+--------+
+                           |
+                           v
+                       prediction
 
     # References
         https://arxiv.org/abs/1512.02325
@@ -197,7 +213,7 @@ def SSD300(input_shape=(300, 300, 3), num_classes=21):
     net['conv8_2_mbox_priorbox'] = x
 
     ###########################################################################
-    # CLASSIFIER:6 LAYER: conv7_2 #############################################
+    # CLASSIFIER:6 LAYER: pool6 ###############################################
 
     num_priors = 6
     cl6_input = net['pool6']
