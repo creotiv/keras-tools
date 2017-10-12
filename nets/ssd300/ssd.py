@@ -5,30 +5,74 @@ from keras.layers import Activation
 from keras.layers import Conv2D
 from keras.layers import Dense
 from keras.layers import Flatten
-from keras.layers import GlobalAveragePooling2D, AveragePooling2D
+from keras.layers import GlobalAveragePooling2D
+from keras.layers import AveragePooling2D
+from keras.layers import Conv2DTranspose
+from keras.layers import BatchNormalization
+from keras.layers import Dropout
 from keras.layers import Input
 from keras.layers import MaxPooling2D
+from keras.layers import Lambda
 from keras.layers import Reshape
 from keras.layers import ZeroPadding2D
 from keras.layers.merge import Concatenate
 from keras.models import Model
+from keras.applications.resnet50 import ResNet50
 
 from ssd_layers import Normalize
 from ssd_layers import PriorBox
 
-from keras.applications.resnet50 import ResNet50
+from math import ceil
 
 
-def SSD300(input_shape=(300, 300, 3), num_classes=21):
-    """SSD300 architecture.
+def Interp(x, shape):
+    from keras.backend import tf as ktf
+    new_height, new_width = shape
+    resized = ktf.image.resize_images(x, [new_height, new_width], align_corners=True)
+    return resized
+
+
+def interp_block(prev_layer, level, feature_map_shape, str_lvl=1):
+    str_lvl = str(str_lvl)
+
+    names = [
+        "conv5_3_pool" + str_lvl + "_conv",
+        "conv5_3_pool" + str_lvl + "_conv_bn"
+    ]
+
+    kernel = (10 * level, 10 * level)
+    strides = (10 * level, 10 * level)
+    prev_layer = AveragePooling2D(kernel, strides=strides)(prev_layer)
+    prev_layer = Conv2D(512, (1, 1), strides=(1, 1), name=names[0], use_bias=False)(prev_layer)
+    prev_layer = BatchNormalization(momentum=0.95, epsilon=1e-5, name=names[1])(prev_layer)
+    prev_layer = Activation('relu')(prev_layer)
+    prev_layer = Lambda(Interp, arguments={'shape': feature_map_shape})(prev_layer)
+    return prev_layer
+
+
+def build_psp(res, input_shape):
+    feature_map_size = (60, 60)  # tuple(int(ceil(input_dim / 5.0)) for input_dim in input_shape)
+    interp_block1 = interp_block(res, 6, feature_map_size, str_lvl=1)
+    interp_block2 = interp_block(res, 3, feature_map_size, str_lvl=2)
+    interp_block3 = interp_block(res, 2, feature_map_size, str_lvl=3)
+    interp_block6 = interp_block(res, 1, feature_map_size, str_lvl=6)
+
+    res = Concatenate()([res,
+                         interp_block6,
+                         interp_block3,
+                         interp_block2,
+                         interp_block1])
+    return res
+
+
+def SSD(input_shape=(300, 300, 3), num_classes=21, segmentation_head=False, depth_head=False):
+    """SSD architecture.
 
     # Arguments
         input_shape: Shape of the input image,
             expected to be either (300, 300, 3).
         num_classes: Number of classes including background.
-        
-    # Classifiers
-        
+
     conv3_4  conv4_6   fc7   conv6_2   conv7_2   pool6
       +       +         +      +           +       +
       |       |         |      |           |       |
@@ -43,8 +87,10 @@ def SSD300(input_shape=(300, 300, 3), num_classes=21):
                            v
                        prediction
 
+
     # References
-        https://arxiv.org/abs/1512.02325
+        SSD: https://arxiv.org/abs/1512.02325
+        Rainbow SSD: https://arxiv.org/abs/1705.09587
     """
     net = {}
     # Block 1
@@ -54,10 +100,11 @@ def SSD300(input_shape=(300, 300, 3), num_classes=21):
 ####################################################################################
     # zerro-padding need for backward compatibility
     x = ZeroPadding2D((3, 3))(input_tensor)
-    model = ResNet50(include_top=False, input_tensor=x, weights='imagenet')
+    model = ResNet50(include_top=False, input_tensor=x)
     # resnet_out = AveragePooling2D((3, 3), strides=(1, 1), padding='same', name='pool5v')(model.get_layer('activation_49').output)
     resnet_out = MaxPooling2D((3, 3), strides=(1, 1), padding='same',
                               name='pool5v')(model.get_layer('activation_49').output)
+
     net['conv3_4'] = model.get_layer("activation_22").output
     net['conv4_6'] = model.get_layer("activation_40").output
 
@@ -101,13 +148,50 @@ def SSD300(input_shape=(300, 300, 3), num_classes=21):
     net['pool6'] = GlobalAveragePooling2D(name='pool6')(net['conv8_2'])
 
     ###########################################################################
+    # Segmentation PSP ########################################################
+    if segmentation_head:
+        x = Lambda(Interp, arguments={'shape': (60, 60)})(net['conv3_4'])
+        psp = build_psp(x, input_shape[:2])
+
+        # segmentation
+        x = Conv2D(512, (3, 3), strides=(1, 1), padding="same", name="seg_conv1_3", use_bias=False)(psp)
+        x = BatchNormalization(momentum=0.95, epsilon=1e-5, name="seg_conv1_3_bn")(x)
+        x = Activation('relu')(x)
+        x = Dropout(0.1)(x)
+
+        x = Conv2D(num_classes, (1, 1), strides=(1, 1), name="seg_conv_last")(x)
+        x = Lambda(Interp, arguments={'shape': (input_shape[0], input_shape[1])})(x)
+        segmentation = Activation('sigmoid', name='segmentation')(x)
+
+    if depth_head:
+        # depth map
+        x = Conv2D(512, (3, 3), strides=(1, 1), padding="same", name="depth_conv1_3", use_bias=False)(psp)
+        x = BatchNormalization(momentum=0.95, epsilon=1e-5, name="depth_conv1_3_bn")(x)
+        x = Activation('relu')(x)
+        x = Dropout(0.1)(x)
+
+        x = Conv2D(512, (3, 3), strides=(1, 1), padding="same", name="depth_conv2_3", use_bias=False)(x)
+        x = BatchNormalization(momentum=0.95, epsilon=1e-5, name="depth_conv2_3_bn")(x)
+        x = Activation('relu')(x)
+        x = Conv2D(1, (3, 3), strides=(1, 1), padding="same", name="depth_conv2_3", use_bias=False)(x)
+        x = Lambda(Interp, arguments={'shape': (input_shape[0], input_shape[1])})(x)
+        depth_map = Activation('relu', name="depth_map")(x)
+
+    ###########################################################################
+
+    asp0 = [1. / 2, 1, 1., 2.]
+    asp1 = [1. / 3, 1. / 2, 1, 1., 2., 3.]
+    scales = [0.1, 0.2, 0.38, 0.56, 0.74, 0.92, 1.1]
+
+    ###########################################################################
     # CLASSIFIER:1 LAYER: conv3_4 #############################################
 
-    num_priors = 3
+    num_priors = len(asp0)
 
     cl1_input = Normalize(20, name='conv3_4_norm')(net['conv3_4'])
 
-    x = Conv2D(num_priors * 4, (3, 3), padding='same', name='conv3_4_norm_mbox_loc')(cl1_input)
+    x = Conv2D(num_priors * 4, (3, 3), strides=(1, 1), dilation_rate=(2, 2),
+               padding='same', name='conv3_4_norm_mbox_loc')(cl1_input)
 
     x = Flatten(name='conv3_4_norm_mbox_loc_flat')(x)
     net['conv3_4_norm_mbox_loc_flat'] = x
@@ -117,7 +201,7 @@ def SSD300(input_shape=(300, 300, 3), num_classes=21):
     x = Flatten(name='conv3_4_norm_mbox_conf_flat')(x)
     net['conv3_4_norm_mbox_conf_flat'] = x
 
-    x = PriorBox(img_size, 30.0, aspect_ratios=[2],
+    x = PriorBox(img_size, scales[0] * img_size[0], aspect_ratios=asp0,
                  variances=[0.1, 0.1, 0.2, 0.2],
                  name='conv3_4_norm_mbox_priorbox')(cl1_input)
     net['conv3_4_norm_mbox_priorbox'] = x
@@ -125,7 +209,7 @@ def SSD300(input_shape=(300, 300, 3), num_classes=21):
     ###########################################################################
     # CLASSIFIER:2 LAYER: conv4_6 #############################################
 
-    num_priors = 6
+    num_priors = len(asp1)
     cl2_input = net['conv4_6']
 
     x = Conv2D(num_priors * 4, (3, 3), padding='same', name='fc7_mbox_loc')(cl2_input)
@@ -138,7 +222,7 @@ def SSD300(input_shape=(300, 300, 3), num_classes=21):
     x = Flatten(name='fc7_mbox_conf_flat')(x)
     net['fc7_mbox_conf_flat'] = x
 
-    x = PriorBox(img_size, 60.0, max_size=114.0, aspect_ratios=[2, 3],
+    x = PriorBox(img_size, scales[1] * img_size[0], max_size=scales[2] * img_size[0], aspect_ratios=asp1,
                  variances=[0.1, 0.1, 0.2, 0.2],
                  name='fc7_mbox_priorbox')(cl2_input)
 
@@ -147,7 +231,7 @@ def SSD300(input_shape=(300, 300, 3), num_classes=21):
     ###########################################################################
     # CLASSIFIER:3 LAYER: fc7 #################################################
 
-    num_priors = 6
+    num_priors = len(asp1)
 
     cl3_input = Conv2D(512, (1, 1), activation='relu', padding='same', name='fc7_mbox_pre')(net['fc7'])
 
@@ -161,7 +245,7 @@ def SSD300(input_shape=(300, 300, 3), num_classes=21):
     x = Flatten(name='conv6_2_mbox_conf_flat')(x)
     net['conv6_2_mbox_conf_flat'] = x
 
-    x = PriorBox(img_size, 114.0, max_size=168.0, aspect_ratios=[2, 3],
+    x = PriorBox(img_size, scales[2] * img_size[0], max_size=scales[3] * img_size[0], aspect_ratios=asp1,
                  variances=[0.1, 0.1, 0.2, 0.2],
                  name='conv6_2_mbox_priorbox')(cl3_input)
 
@@ -170,7 +254,7 @@ def SSD300(input_shape=(300, 300, 3), num_classes=21):
     ###########################################################################
     # CLASSIFIER:4 LAYER: conv6_2 #############################################
 
-    num_priors = 6
+    num_priors = len(asp1)
 
     cl4_input = Conv2D(256, (1, 1), activation='relu', padding='same', name='conv6_2_mbox_pre')(net['conv6_2'])
 
@@ -184,7 +268,7 @@ def SSD300(input_shape=(300, 300, 3), num_classes=21):
     x = Flatten(name='conv7_2_mbox_conf_flat')(x)
     net['conv7_2_mbox_conf_flat'] = x
 
-    x = PriorBox(img_size, 168.0, max_size=222.0, aspect_ratios=[2, 3],
+    x = PriorBox(img_size, scales[3] * img_size[0], max_size=scales[4] * img_size[0], aspect_ratios=asp1,
                  variances=[0.1, 0.1, 0.2, 0.2],
                  name='conv7_2_mbox_priorbox')(cl4_input)
 
@@ -193,7 +277,7 @@ def SSD300(input_shape=(300, 300, 3), num_classes=21):
     ###########################################################################
     # CLASSIFIER:5 LAYER: conv7_2 #############################################
 
-    num_priors = 6
+    num_priors = len(asp1)
     cl5_input = net['conv7_2']
 
     x = Conv2D(num_priors * 4, (3, 3), padding='same', name='conv8_2_mbox_loc')(cl5_input)
@@ -206,7 +290,7 @@ def SSD300(input_shape=(300, 300, 3), num_classes=21):
     x = Flatten(name='conv8_2_mbox_conf_flat')(x)
     net['conv8_2_mbox_conf_flat'] = x
 
-    x = PriorBox(img_size, 222.0, max_size=276.0, aspect_ratios=[2, 3],
+    x = PriorBox(img_size, scales[4] * img_size[0], max_size=scales[5] * img_size[0], aspect_ratios=asp1,
                  variances=[0.1, 0.1, 0.2, 0.2],
                  name='conv8_2_mbox_priorbox')(cl5_input)
 
@@ -215,7 +299,7 @@ def SSD300(input_shape=(300, 300, 3), num_classes=21):
     ###########################################################################
     # CLASSIFIER:6 LAYER: pool6 ###############################################
 
-    num_priors = 6
+    num_priors = len(asp0)
     cl6_input = net['pool6']
 
     x = Dense(num_priors * 4, name='pool6_mbox_loc_flat')(cl6_input)
@@ -230,7 +314,7 @@ def SSD300(input_shape=(300, 300, 3), num_classes=21):
         target_shape = (256, 1, 1)
     x = Reshape(target_shape, name='pool6_reshaped')(cl6_input)
 
-    x = PriorBox(img_size, 276.0, max_size=330.0, aspect_ratios=[2, 3],
+    x = PriorBox(img_size, scales[5] * img_size[0], max_size=scales[6] * img_size[0], aspect_ratios=asp0,
                  variances=[0.1, 0.1, 0.2, 0.2],
                  name='pool6_mbox_priorbox')(x)
 
@@ -271,11 +355,19 @@ def SSD300(input_shape=(300, 300, 3), num_classes=21):
     net['mbox_loc'] = Reshape((num_boxes, 4), name='mbox_loc_final')(net['mbox_loc'])
     net['mbox_conf'] = Reshape((num_boxes, num_classes), name='mbox_conf_logits')(net['mbox_conf'])
     net['mbox_conf'] = Activation('softmax', name='mbox_conf_final')(net['mbox_conf'])
-    net['predictions'] = Concatenate(axis=2, name='predictions')([
+
+    ssd_out = Concatenate(axis=2, name='ssd_out')([
         net['mbox_loc'],
         net['mbox_conf'],
         net['mbox_priorbox']])
 
-    model = Model(input_tensor, net['predictions'])
-
+    if not segmentation_head and not depth_head:
+        model = Model(input_tensor, ssd_out)
+    else:
+        out = [ssd_out]
+        if segmentation_head:
+            out.append(segmentation)
+        if depth_head:
+            out.append(depth_map)
+        model = Model(input_tensor, out)
     return model
