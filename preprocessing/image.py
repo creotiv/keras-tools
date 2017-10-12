@@ -786,6 +786,31 @@ def zip_gen(args, merge=[], merge_axis=-1, preprocess_func=None, preprocess_args
             yield tuple(out)
         else:
             yield tuple(tmp)
+            
+def image2masks(img, ignore_colors=[],color_to_lable={}):
+    '''
+        This is not very fast algorithm
+    
+        # Example?:
+            
+            labels = {
+                (38.,  156.,  255.): "car",
+                (255.,  59.,  54.): "person",
+            }
+            res = image2masks(img, ignore_colors=[(254.0, 249.0, 246.0)], color_to_lable=labels)
+            print res['car'].shape
+    '''
+    size = img.shape[0]*img.shape[1]
+    a = np.concatenate(img[:,:]).tolist()
+    colors = np.array(list(set(map(lambda x: tuple(x), a)) - set(ignore_colors)))
+    out = {}
+    for i in range(len(colors)):
+        indices = np.where(np.all(img == colors[i], axis=-1))
+        m = np.zeros(img.shape[:2]+(1,),dtype=np.uint8)
+        label = color_to_lable.get(tuple(colors[i]))
+        m[indices] = 255
+        out[label] = m
+    return out
 
 if __name__ == "__main__":
     pass
