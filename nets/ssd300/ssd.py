@@ -54,7 +54,7 @@ def SSD300(input_shape=(300, 300, 3), num_classes=21):
 ####################################################################################
     # zerro-padding need for backward compatibility
     x = ZeroPadding2D((3, 3))(input_tensor)
-    model = ResNet50(include_top=False, input_tensor=x)
+    model = ResNet50(include_top=False, input_tensor=x, weights='imagenet')
     # resnet_out = AveragePooling2D((3, 3), strides=(1, 1), padding='same', name='pool5v')(model.get_layer('activation_49').output)
     resnet_out = MaxPooling2D((3, 3), strides=(1, 1), padding='same',
                               name='pool5v')(model.get_layer('activation_49').output)
