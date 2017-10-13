@@ -52,10 +52,10 @@ def interp_block(prev_layer, level, feature_map_shape, str_lvl=1):
 
 def build_psp(res, input_shape):
     feature_map_size = (60, 60)  # tuple(int(ceil(input_dim / 5.0)) for input_dim in input_shape)
-    interp_block1 = interp_block(res, 6, feature_map_size, str_lvl=1)
+    interp_block1 = interp_block(res, 6, feature_map_size, str_lvl=1) # min
     interp_block2 = interp_block(res, 3, feature_map_size, str_lvl=2)
     interp_block3 = interp_block(res, 2, feature_map_size, str_lvl=3)
-    interp_block6 = interp_block(res, 1, feature_map_size, str_lvl=6)
+    interp_block6 = interp_block(res, 1, feature_map_size, str_lvl=6) # max
 
     res = Concatenate()([res,
                          interp_block6,
@@ -149,19 +149,6 @@ def SSD(input_shape=(300, 300, 3), num_classes=21, segmentation_head=False, dept
 
     ###########################################################################
     # Segmentation PSP ########################################################
-    if segmentation_head:
-        x = Lambda(Interp, arguments={'shape': (60, 60)})(net['conv3_4'])
-        psp = build_psp(x, input_shape[:2])
-
-        # segmentation
-        x = Conv2D(512, (3, 3), strides=(1, 1), padding="same", name="seg_conv1_3", use_bias=False)(psp)
-        x = BatchNormalization(momentum=0.95, epsilon=1e-5, name="seg_conv1_3_bn")(x)
-        x = Activation('relu')(x)
-        x = Dropout(0.1)(x)
-
-        x = Conv2D(num_classes, (1, 1), strides=(1, 1), name="seg_conv_last")(x)
-        x = Lambda(Interp, arguments={'shape': (input_shape[0], input_shape[1])})(x)
-        segmentation = Activation('sigmoid', name='segmentation')(x)
 
     if depth_head:
         # depth map
@@ -183,6 +170,9 @@ def SSD(input_shape=(300, 300, 3), num_classes=21, segmentation_head=False, dept
     asp1 = [1. / 3, 1. / 2, 1, 1., 2., 3.]
     scales = [0.1, 0.2, 0.38, 0.56, 0.74, 0.92, 1.1]
 
+    if segmentation_head:
+        net['psp1'] = Lambda(Interp, arguments={'shape': (60, 60)})(model.output)
+
     ###########################################################################
     # CLASSIFIER:1 LAYER: conv3_4 #############################################
 
@@ -197,6 +187,10 @@ def SSD(input_shape=(300, 300, 3), num_classes=21, segmentation_head=False, dept
     net['conv3_4_norm_mbox_loc_flat'] = x
 
     x = Conv2D(num_priors * num_classes, (3, 3), padding='same', name="conv3_4_norm_mbox_conf")(cl1_input)
+
+    if segmentation_head:
+        net['psp6'] = Lambda(Interp, arguments={'shape': (60, 60)})(x)
+        # net['psp6'] = interp_block(y, 1, (60,60), str_lvl=6)
 
     x = Flatten(name='conv3_4_norm_mbox_conf_flat')(x)
     net['conv3_4_norm_mbox_conf_flat'] = x
@@ -219,6 +213,10 @@ def SSD(input_shape=(300, 300, 3), num_classes=21, segmentation_head=False, dept
 
     x = Conv2D(num_priors * num_classes, (3, 3), padding='same', name="fc7_mbox_conf")(cl2_input)
 
+    if segmentation_head:
+        net['psp5'] = Lambda(Interp, arguments={'shape': (60, 60)})(x)
+        # net['psp5'] = interp_block(y, 2, (60,60), str_lvl=4)
+    
     x = Flatten(name='fc7_mbox_conf_flat')(x)
     net['fc7_mbox_conf_flat'] = x
 
@@ -241,6 +239,10 @@ def SSD(input_shape=(300, 300, 3), num_classes=21, segmentation_head=False, dept
     net['conv6_2_mbox_loc_flat'] = x
 
     x = Conv2D(num_priors * num_classes, (3, 3), padding='same', name="conv6_2_mbox_conf")(cl3_input)
+
+    if segmentation_head:
+        net['psp4'] = Lambda(Interp, arguments={'shape': (60, 60)})(x)
+        # net['psp4'] = interp_block(y, 3, (60,60), str_lvl=3)
 
     x = Flatten(name='conv6_2_mbox_conf_flat')(x)
     net['conv6_2_mbox_conf_flat'] = x
@@ -265,6 +267,10 @@ def SSD(input_shape=(300, 300, 3), num_classes=21, segmentation_head=False, dept
 
     x = Conv2D(num_priors * num_classes, (3, 3), padding='same', name="conv7_2_mbox_conf")(cl4_input)
 
+    if segmentation_head:
+        net['psp3'] = Lambda(Interp, arguments={'shape': (60, 60)})(x)
+        # net['psp3'] = interp_block(y, 4, (60,60), str_lvl=2)
+
     x = Flatten(name='conv7_2_mbox_conf_flat')(x)
     net['conv7_2_mbox_conf_flat'] = x
 
@@ -286,6 +292,10 @@ def SSD(input_shape=(300, 300, 3), num_classes=21, segmentation_head=False, dept
     net['conv8_2_mbox_loc_flat'] = x
 
     x = Conv2D(num_priors * num_classes, (3, 3), padding='same', name="conv8_2_mbox_conf")(cl5_input)
+
+    if segmentation_head:
+        net['psp2'] = Lambda(Interp, arguments={'shape': (60, 60)})(x)
+        # net['psp2'] = interp_block(y, 6, (60,60), str_lvl=1)
 
     x = Flatten(name='conv8_2_mbox_conf_flat')(x)
     net['conv8_2_mbox_conf_flat'] = x
@@ -346,6 +356,28 @@ def SSD(input_shape=(300, 300, 3), num_classes=21, segmentation_head=False, dept
         net['conv7_2_mbox_priorbox'],
         net['conv8_2_mbox_priorbox'],
         net['pool6_mbox_priorbox']])
+
+    if segmentation_head:
+        psp = Concatenate(axis=-1, name='psp')([
+            net['psp1'],
+            net['psp2'],
+            net['psp3'],
+            net['psp4'],
+            net['psp5'],
+            net['psp6'],
+        ])
+        psp.trainable = False
+
+        x = Conv2D(256, (3, 3), strides=(1, 1), padding="same", name="seg_conv1_1")(psp)
+        x = Activation('relu')(x)
+        x = Conv2D(256, (3, 3), strides=(1, 1), padding="same", name="seg_conv1_2")(x)
+        x = BatchNormalization(momentum=0.95, epsilon=1e-5, name="seg_conv1_2_bn")(x)
+        x = Activation('relu')(x)
+        x = Dropout(0.1)(x)
+
+        x = Conv2D(num_classes, (1, 1), strides=(1, 1), name="seg_conv_last")(x)
+        x = Lambda(Interp, arguments={'shape': (input_shape[0], input_shape[1])})(x)
+        segmentation = Activation('sigmoid', name='segmentation')(x)
 
     if hasattr(net['mbox_loc'], '_keras_shape'):
         num_boxes = net['mbox_loc']._keras_shape[-1] // 4
