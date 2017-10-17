@@ -1,4 +1,6 @@
 def shape_context(points, nbins_r=5, nbins_theta=12, r_inner=0.1250, r_outer=2.0):
+    # info here: https://github.com/creotiv/Python-Shape-Context/blob/master/info/ShapeContexts425.pdf
+    
     nbins = nbins_theta * nbins_r
     t_points = len(points)
 
