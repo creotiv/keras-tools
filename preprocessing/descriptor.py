@@ -1,3 +1,8 @@
+import os
+import numpy as np
+import math
+from scipy.spatial.distance import cdist
+
 def shape_context(points, nbins_r=5, nbins_theta=12, r_inner=0.1250, r_outer=2.0):
     # info here: https://github.com/creotiv/Python-Shape-Context/blob/master/info/ShapeContexts425.pdf
     
