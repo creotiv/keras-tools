@@ -1,8 +1,10 @@
 import keras
 import keras.backend as K
 import tensorflow as tf
-import json
+import yaml
 import os
+import math
+import numpy as np
 from datadiff.tools import assert_equal
 
 
@@ -53,16 +55,18 @@ class ConfigSaver(object):
             self._version = last
 
     def _save(self):
-        with open(os.path.join(self._path, "config_%s.json" % self._version), 'w') as fp:
-            fp.write(json.dumps(self._dict))
+        with open(os.path.join(self._path, "config_%s.yaml" % self._version), 'w') as fp:
+            yaml.dump(self._dict, fp, default_flow_style=False)
 
     def _load(self, version=None):
         if not version:
             version = self._version
         try:
-            with open(os.path.join(self._path, "config_%s.json" % version)) as fp:
-                d = json.loads(fp.read().strip())
-                del d['__COMMENT__']
+            with open(os.path.join(self._path, "config_%s.yaml" % version)) as fp:
+                d = yaml.load(fp)
+                if '__COMMENT__' in d:
+                    del d['__COMMENT__']
+                return d
         except:
             return {}
 
@@ -77,3 +81,25 @@ class ConfigSaver(object):
         else:
             return getattr(self, '_dict').get(key.upper())
 
+
+def imgs_side_by_side(imgs):
+    num = imgs.shape[0]
+    ch = imgs.shape[-1]
+    h = imgs.shape[1]
+    w = imgs.shape[2]
+
+    edge = int(math.ceil(math.sqrt(num)))
+    new_w = edge * w
+    new_h = edge * h
+    res = np.zeros((new_h, new_w, ch))
+    res.fill(255)
+
+    i = 0
+    for y in range(edge):
+        for x in range(edge):
+            if i >= num:
+                break
+            res[y * h:y * h + h, x * w:x * w + w] = imgs[i]
+            i += 1
+
+    return res
