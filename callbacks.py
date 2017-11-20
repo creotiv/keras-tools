@@ -35,6 +35,6 @@ class TFCheckpointCallback(Callback):
         self.saver.save(self.sess, os.path.join(self.ch_dir, 'checkpoint.ckpt'), global_step=epoch)
 
     def on_train_begin(self, logs=None):
-        if 'checkpoint' in os.listdir(self.ch_dir)[0]:
+        if os.listdir(self.ch_dir) and 'checkpoint' in os.listdir(self.ch_dir)[0]:
             self.saver.restore(self.sess, tf.train.latest_checkpoint(self.ch_dir))
             print('load weights: OK.')
