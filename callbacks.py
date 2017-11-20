@@ -1,4 +1,4 @@
-from keras.callbacks import TensorBoard
+from keras.callbacks import TensorBoard, Callback
 
 class TensorBoardGen(TensorBoard):
     '''
@@ -22,3 +22,19 @@ class TensorBoardGen(TensorBoard):
             self.validation_data += [0.]
 
         super(TensorBoardGen, self).on_epoch_end(epoch, logs)
+        
+        
+class TFCheckpointCallback(Callback):
+
+    def __init__(self, ch_dir='./ch'):
+        self.saver = tf.train.Saver()
+        self.sess = K.get_session()
+        self.ch_dir = ch_dir
+
+    def on_epoch_end(self, epoch, logs=None):
+        self.saver.save(self.sess, os.path.join(self.ch_dir, 'checkpoint.ckpt'), global_step=epoch)
+
+    def on_train_begin(self, logs=None):
+        if 'checkpoint' in os.listdir(self.ch_dir)[0]:
+            self.saver.restore(self.sess, tf.train.latest_checkpoint(self.ch_dir))
+            print('load weights: OK.')
