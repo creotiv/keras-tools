@@ -77,7 +77,7 @@ class _CoordinateChannel(Layer):
 
             xx_channels = K.cast(xx_range, K.floatx())
             xx_channels = xx_channels / K.cast(dim - 1, K.floatx())
-            xx_channels = (xx_channels * 2) - 1.
+            #xx_channels = (xx_channels * 2) - 1.
 
             outputs = K.concatenate([inputs, xx_channels], axis=-1)
 
@@ -112,11 +112,11 @@ class _CoordinateChannel(Layer):
 
             xx_channels = K.cast(xx_channels, K.floatx())
             xx_channels = xx_channels / K.cast(dim1 - 1, K.floatx())
-            xx_channels = (xx_channels * 2) - 1.
+            #xx_channels = (xx_channels * 2) - 1.
 
             yy_channels = K.cast(yy_channels, K.floatx())
             yy_channels = yy_channels / K.cast(dim2 - 1, K.floatx())
-            yy_channels = (yy_channels * 2) - 1.
+            #yy_channels = (yy_channels * 2) - 1.
 
             outputs = K.concatenate([inputs, xx_channels, yy_channels], axis=-1)
 
@@ -177,15 +177,15 @@ class _CoordinateChannel(Layer):
 
             xx_channels = K.cast(xx_channels, K.floatx())
             xx_channels = xx_channels / K.cast(dim2 - 1, K.floatx())
-            xx_channels = xx_channels * 2 - 1.
+            #xx_channels = xx_channels * 2 - 1.
 
             yy_channels = K.cast(yy_channels, K.floatx())
             yy_channels = yy_channels / K.cast(dim3 - 1, K.floatx())
-            yy_channels = yy_channels * 2 - 1.
+            #yy_channels = yy_channels * 2 - 1.
 
             zz_channels = K.cast(zz_channels, K.floatx())
             zz_channels = zz_channels / K.cast(dim1 - 1, K.floatx())
-            zz_channels = zz_channels * 2 - 1.
+            #zz_channels = zz_channels * 2 - 1.
 
             outputs = K.concatenate([inputs, zz_channels, xx_channels, yy_channels],
                                     axis=-1)
